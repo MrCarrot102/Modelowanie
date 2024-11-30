@@ -1,152 +1,173 @@
-#include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
 #include <SFML/OpenGL.hpp>
-#include <GL/glew.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <vector>
-#include <iostream>
+#include <cmath>
+#include <random>
 
-// Vertex shader source
-const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 position;
-uniform mat4 projection;
-uniform mat4 view;
-void main() {
-    gl_Position = projection * view * vec4(position, 1.0);
-}
-)";
+// Struktura wektora 3D
+struct Vector3D {
+    float x, y, z;
 
-// Fragment shader source
-const char* fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-void main() {
-    FragColor = vec4(1.0, 0.5, 0.2, 1.0); // Orange color
-}
-)";
+    Vector3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 
-// Compile shader and check for errors
-GLuint compileShader(GLenum type, const char* source) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-
-    GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER_COMPILATION_FAILED\n" << infoLog << std::endl;
+    Vector3D operator+(const Vector3D& other) const {
+        return Vector3D(x + other.x, y + other.y, z + other.z);
     }
 
-    return shader;
-}
-
-// Link shaders into a program
-GLuint createShaderProgram() {
-    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
-    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    GLint success;
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::cerr << "ERROR::PROGRAM_LINKING_FAILED\n" << infoLog << std::endl;
+    Vector3D operator-(const Vector3D& other) const {
+        return Vector3D(x - other.x, y - other.y, z - other.z);
     }
 
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+    Vector3D operator*(float scalar) const {
+        return Vector3D(x * scalar, y * scalar, z * scalar);
+    }
 
-    return shaderProgram;
-}
+    Vector3D& operator+=(const Vector3D& other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
+    float length() const {
+        return std::sqrt(x * x + y * y + z * z);
+    }
+
+    Vector3D normalized() const {
+        float len = length();
+        return len > 0 ? Vector3D(x / len, y / len, z / len) : Vector3D(0, 0, 0);
+    }
+};
+
+// Klasa cząsteczki
+class Particle {
+public:
+    Vector3D position;
+    Vector3D velocity;
+    sf::Color color;
+    float lifeTime;
+    float size;
+
+    Particle(const Vector3D& pos, const Vector3D& vel, sf::Color col, float life, float sz)
+        : position(pos), velocity(vel), color(col), lifeTime(life), size(sz) {}
+
+    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint) {
+        Vector3D attractionForce = (attractionPoint - position).normalized() * 20.0f; // Silniejsze przyciąganie
+        velocity += (wind + attractionForce) * dt;
+        position += velocity * dt;
+        lifeTime -= dt;
+    }
+
+    bool isAlive() const {
+        return lifeTime > 0;
+    }
+};
+
+// Klasa emitera
+class Emitter {
+    std::vector<Particle> particles;
+    Vector3D position;
+
+public:
+    Emitter(const Vector3D& pos) : position(pos) {}
+
+    void emit(int count) {
+        for (int i = 0; i < count; ++i) {
+            Vector3D velocity = randomVelocity() * 50.0f;  // Wolniejsza prędkość początkowa
+            sf::Color color(rand() % 255, rand() % 255, rand() % 255, 150);  // Przezroczystość
+            float lifeTime = static_cast<float>(rand() % 3 + 3);  // Dłuższy czas życia
+            float size = rand() % 2 + 1;  // Mniejsze cząsteczki
+            particles.emplace_back(position, velocity, color, lifeTime, size);
+        }
+    }
+
+    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint) {
+        for (auto& particle : particles) {
+            particle.update(dt, wind, attractionPoint);
+        }
+        particles.erase(std::remove_if(particles.begin(), particles.end(),
+                                       [](const Particle& p) { return !p.isAlive(); }),
+                        particles.end());
+    }
+
+    void draw(sf::RenderWindow& window) {
+        for (const auto& particle : particles) {
+            sf::CircleShape shape(particle.size);
+            shape.setPosition(particle.position.x, particle.position.y);
+            shape.setFillColor(particle.color);
+            window.draw(shape);
+        }
+    }
+
+    // Zmiana koloru cząsteczek na kliknięcie
+    void changeColorOnClick(sf::Vector2i mousePosition) {
+        for (auto& particle : particles) {
+            if (particle.position.x <= mousePosition.x + 5 && particle.position.x >= mousePosition.x - 5 &&
+                particle.position.y <= mousePosition.y + 5 && particle.position.y >= mousePosition.y - 5) {
+                particle.color = sf::Color(rand() % 255, rand() % 255, rand() % 255, 150); // Losowy kolor
+            }
+        }
+    }
+
+private:
+    Vector3D randomVelocity() {
+        static std::default_random_engine generator;
+        static std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+        return Vector3D(distribution(generator), distribution(generator), 0);
+    }
+};
 
 int main() {
-    sf::ContextSettings settings;
-    settings.depthBits = 24;
-    settings.stencilBits = 8;
-    settings.antialiasingLevel = 4;
-    settings.majorVersion = 3;
-    settings.minorVersion = 3;
+    sf::RenderWindow window(sf::VideoMode(800, 600), "Particle System with Forces", sf::Style::Default, sf::ContextSettings(24));
+    window.setFramerateLimit(60);
 
-    sf::Window window(sf::VideoMode(800, 600), "3D Particle System", sf::Style::Default, settings);
-    window.setActive(true);
+    Emitter emitter(Vector3D(400, 300, 0));
+    Vector3D wind(0, 0, 0);  // Początkowy brak wiatru
+    Vector3D attractionPoint(400, 300, 0);  // Początkowy punkt przyciągania (środek ekranu)
 
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-        std::cerr << "Error initializing GLEW: " << glewGetErrorString(err) << std::endl;
-        return -1;
-    }
-
-    // Define a simple cube (for particles or objects)
-    float vertices[] = {
-        -0.5f, -0.5f, -0.5f,
-         0.5f, -0.5f, -0.5f,
-         0.5f,  0.5f, -0.5f,
-         0.5f,  0.5f, -0.5f,
-        -0.5f,  0.5f, -0.5f,
-        -0.5f, -0.5f, -0.5f,
-
-        -0.5f, -0.5f,  0.5f,
-         0.5f, -0.5f,  0.5f,
-         0.5f,  0.5f,  0.5f,
-         0.5f,  0.5f,  0.5f,
-        -0.5f,  0.5f,  0.5f,
-        -0.5f, -0.5f,  0.5f
-    };
-
-    GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    GLuint shaderProgram = createShaderProgram();
-
-    // Set up projection and view matrices
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
-    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
-
+    sf::Clock clock;
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
             }
+            if (event.type == sf::Event::MouseButtonPressed) {
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    attractionPoint = Vector3D(event.mouseButton.x, event.mouseButton.y, 0);
+                }
+                if (event.mouseButton.button == sf::Mouse::Right) {
+                    emitter.changeColorOnClick(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+                }
+            }
         }
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // Sterowanie wiatrem klawiaturą
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+            wind.x = -20.0f;  // Silniejszy wiatr
+        } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+            wind.x = 20.0f;  // Silniejszy wiatr
+        } else {
+            wind.x = 0;
+        }
 
-        glUseProgram(shaderProgram);
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+            wind.y = -20.0f;  // Silniejszy wiatr
+        } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
+            wind.y = 20.0f;  // Silniejszy wiatr
+        } else {
+            wind.y = 0;
+        }
 
-        GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
-        GLuint viewLoc = glGetUniformLocation(shaderProgram, "view");
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+        float dt = clock.restart().asSeconds();
 
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        emitter.emit(30);  // Emitowanie 30 cząsteczek na raz
+        emitter.update(dt, wind, attractionPoint);
 
+        window.clear();
+        emitter.draw(window);
         window.display();
     }
-
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteProgram(shaderProgram);
 
     return 0;
 }
