@@ -39,6 +39,18 @@ struct Vector3D {
     }
 };
 
+// Struktura koła
+struct Circle {
+    Vector3D position;
+    float radius;
+
+    Circle(const Vector3D& pos, float r) : position(pos), radius(r) {}
+
+    bool contains(const Vector3D& point) const {
+        return (point - position).length() <= radius;
+    }
+};
+
 // Klasa cząsteczki
 class Particle {
 public:
@@ -51,10 +63,19 @@ public:
     Particle(const Vector3D& pos, const Vector3D& vel, sf::Color col, float life, float sz)
         : position(pos), velocity(vel), color(col), lifeTime(life), size(sz) {}
 
-    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint) {
-        Vector3D attractionForce = (attractionPoint - position).normalized() * 20.0f; // Silniejsze przyciąganie
+    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint, const std::vector<Circle>& circles) {
+        Vector3D attractionForce = (attractionPoint - position).normalized() * 20.0f;
         velocity += (wind + attractionForce) * dt;
         position += velocity * dt;
+
+        for (const auto& circle : circles) {
+            if (circle.contains(position)) {
+                // Odbicie: proste odbicie w przeciwnym kierunku
+                velocity = velocity * -0.8f; // Tłumienie odbicia
+                position += velocity * dt;
+            }
+        }
+
         lifeTime -= dt;
     }
 
@@ -73,17 +94,17 @@ public:
 
     void emit(int count) {
         for (int i = 0; i < count; ++i) {
-            Vector3D velocity = randomVelocity() * 50.0f;  // Wolniejsza prędkość początkowa
-            sf::Color color(rand() % 255, rand() % 255, rand() % 255, 150);  // Przezroczystość
-            float lifeTime = static_cast<float>(rand() % 3 + 3);  // Dłuższy czas życia
-            float size = rand() % 2 + 1;  // Mniejsze cząsteczki
+            Vector3D velocity = randomVelocity() * 50.0f;
+            sf::Color color(rand() % 255, rand() % 255, rand() % 255, 150);
+            float lifeTime = static_cast<float>(rand() % 3 + 3);
+            float size = rand() % 2 + 1;
             particles.emplace_back(position, velocity, color, lifeTime, size);
         }
     }
 
-    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint) {
+    void update(float dt, const Vector3D& wind, const Vector3D& attractionPoint, const std::vector<Circle>& circles) {
         for (auto& particle : particles) {
-            particle.update(dt, wind, attractionPoint);
+            particle.update(dt, wind, attractionPoint, circles);
         }
         particles.erase(std::remove_if(particles.begin(), particles.end(),
                                        [](const Particle& p) { return !p.isAlive(); }),
@@ -99,16 +120,6 @@ public:
         }
     }
 
-    // Zmiana koloru cząsteczek na kliknięcie
-    void changeColorOnClick(sf::Vector2i mousePosition) {
-        for (auto& particle : particles) {
-            if (particle.position.x <= mousePosition.x + 5 && particle.position.x >= mousePosition.x - 5 &&
-                particle.position.y <= mousePosition.y + 5 && particle.position.y >= mousePosition.y - 5) {
-                particle.color = sf::Color(rand() % 255, rand() % 255, rand() % 255, 150); // Losowy kolor
-            }
-        }
-    }
-
 private:
     Vector3D randomVelocity() {
         static std::default_random_engine generator;
@@ -118,12 +129,14 @@ private:
 };
 
 int main() {
-    sf::RenderWindow window(sf::VideoMode(800, 600), "Particle System with Forces", sf::Style::Default, sf::ContextSettings(24));
+    sf::RenderWindow window(sf::VideoMode(800, 600), "Particle System with Circles", sf::Style::Default, sf::ContextSettings(24));
     window.setFramerateLimit(60);
 
     Emitter emitter(Vector3D(400, 300, 0));
-    Vector3D wind(0, 0, 0);  // Początkowy brak wiatru
-    Vector3D attractionPoint(400, 300, 0);  // Początkowy punkt przyciągania (środek ekranu)
+    Vector3D wind(0, 0, 0);
+    Vector3D attractionPoint(400, 300, 0);
+
+    std::vector<Circle> circles;
 
     sf::Clock clock;
     while (window.isOpen()) {
@@ -136,36 +149,36 @@ int main() {
                 if (event.mouseButton.button == sf::Mouse::Left) {
                     attractionPoint = Vector3D(event.mouseButton.x, event.mouseButton.y, 0);
                 }
-                if (event.mouseButton.button == sf::Mouse::Right) {
-                    emitter.changeColorOnClick(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+                if (event.mouseButton.button == sf::Mouse::Middle) {
+                    circles.emplace_back(Vector3D(event.mouseButton.x, event.mouseButton.y, 0), 50.0f); // Koło o promieniu 50
                 }
             }
         }
 
-        // Sterowanie wiatrem klawiaturą
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-            wind.x = -20.0f;  // Silniejszy wiatr
-        } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-            wind.x = 20.0f;  // Silniejszy wiatr
-        } else {
-            wind.x = 0;
-        }
+        // Obsługa klawiatury dla wiatru
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) wind.x = -20.0f;
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) wind.x = 20.0f;
+        else wind.x = 0;
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
-            wind.y = -20.0f;  // Silniejszy wiatr
-        } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
-            wind.y = 20.0f;  // Silniejszy wiatr
-        } else {
-            wind.y = 0;
-        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) wind.y = -20.0f;
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) wind.y = 20.0f;
+        else wind.y = 0;
 
         float dt = clock.restart().asSeconds();
 
-        emitter.emit(30);  // Emitowanie 30 cząsteczek na raz
-        emitter.update(dt, wind, attractionPoint);
+        emitter.emit(30);
+        emitter.update(dt, wind, attractionPoint, circles);
 
         window.clear();
         emitter.draw(window);
+
+        for (const auto& circle : circles) {
+            sf::CircleShape shape(circle.radius);
+            shape.setPosition(circle.position.x - circle.radius, circle.position.y - circle.radius);
+            shape.setFillColor(sf::Color(255, 255, 255, 50));
+            window.draw(shape);
+        }
+
         window.display();
     }
 

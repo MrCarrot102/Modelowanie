@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/ParticleSystem3D.dir/main.cpp.o -o ParticleSystem3D  /usr/lib/x86_64-linux-gnu/libGL.so /usr/lib/x86_64-linux-gnu/libGLU.so /usr/lib/x86_64-linux-gnu/libGLEW.so 
