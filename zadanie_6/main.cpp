@@ -54,12 +54,12 @@ public:
     void update(float dt) {
         position += velocity * dt;
 
-        // Stopniowe przejście koloru od czerwonego do żółtego
-        float progress = 1.0f - (lifeTime / 5.0f); // Assuming max lifetime is 5 seconds
+
+        float progress = 1.0f - (lifeTime / 5.0f); 
         color = sf::Color(
-            255, // Red stays constant
-            static_cast<sf::Uint8>(progress * 255), // Green increases
-            0,   // Blue stays zero
+            255,
+            static_cast<sf::Uint8>(progress * 255), 
+            0,  
             150);
 
         lifeTime -= dt;
@@ -70,7 +70,6 @@ public:
     }
 };
 
-// Klasa płatków śniegu
 class Snowflake {
 public:
     Vector3D position;
@@ -82,7 +81,6 @@ public:
 
     void update(float dt) {
         position += velocity * dt;
-        // Delikatny ruch w lewo i prawo
         velocity.x += ((rand() % 3) - 1) * 0.1f;
     }
 
@@ -104,9 +102,9 @@ public:
     void emit(int count) {
         for (int i = 0; i < count; ++i) {
             Vector3D velocity = randomVelocity() * 50.0f;
-            sf::Color color(255, 0, 0, 150); // Start with red
-            float lifeTime = static_cast<float>(rand() % 3 + 2); // Lifetimes between 2 and 5 seconds
-            float size = rand() % 2 + 2; // Slightly larger particles
+            sf::Color color(255, 0, 0, 150);
+            float lifeTime = static_cast<float>(rand() % 3 + 2); 
+            float size = rand() % 2 + 2;
             particles.emplace_back(position, velocity, color, lifeTime, size);
         }
     }
@@ -141,14 +139,14 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(800, 600), "Particle System - Fire and Snow", sf::Style::Default, sf::ContextSettings(24));
     window.setFramerateLimit(60);
 
-    Emitter fireEmitter(Vector3D(400, 580, 0)); // Position emitter near the bottom of the screen
+    Emitter fireEmitter(Vector3D(400, 580, 0));
 
     std::vector<Snowflake> snowflakes;
-    for (int i = 0; i < 200; ++i) { // Increase the number of snowflakes
+    for (int i = 0; i < 200; ++i) { 
         float x = rand() % 800;
         float y = rand() % 600;
         Vector3D position(x, y, 0);
-        Vector3D velocity(0, 30.0f, 0); // Falling down
+        Vector3D velocity(0, 30.0f, 0);
         float size = rand() % 3 + 1;
         snowflakes.emplace_back(position, velocity, size);
     }
@@ -164,12 +162,12 @@ int main() {
 
         float dt = clock.restart().asSeconds();
 
-        fireEmitter.emit(15); // Emit fewer particles for a consistent fire effect
+        fireEmitter.emit(15);
         fireEmitter.update(dt);
 
         for (auto& snowflake : snowflakes) {
             snowflake.update(dt);
-            // Reset snowflake if it goes off screen
+
             if (snowflake.position.y > 600) {
                 snowflake.position.y = 0;
                 snowflake.position.x = rand() % 800;
@@ -178,10 +176,10 @@ int main() {
 
         window.clear();
 
-        // Draw ground (optional, decorative)
+
         sf::RectangleShape ground(sf::Vector2f(800, 20));
         ground.setPosition(0, 580);
-        ground.setFillColor(sf::Color(139, 69, 19)); // Brown color for ground
+        ground.setFillColor(sf::Color(139, 69, 19));
         window.draw(ground);
 
         fireEmitter.draw(window);
@@ -190,10 +188,10 @@ int main() {
             snowflake.draw(window);
         }
 
-        // Draw signature
+
         sf::Font font;
         if (!font.loadFromFile("arial.ttf")) {
-            // Handle font loading error
+
             return -1;
         }
         
