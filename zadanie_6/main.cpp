@@ -39,7 +39,7 @@ struct Vector3D {
     }
 };
 
-// Klasa cząsteczki - Fire Particle
+// Klasa cząsteczki ognia
 class Particle {
 public:
     Vector3D position;
@@ -70,7 +70,30 @@ public:
     }
 };
 
-// Klasa emitera - Fire Emitter
+// Klasa płatków śniegu
+class Snowflake {
+public:
+    Vector3D position;
+    Vector3D velocity;
+    float size;
+
+    Snowflake(const Vector3D& pos, const Vector3D& vel, float sz)
+        : position(pos), velocity(vel), size(sz) {}
+
+    void update(float dt) {
+        position += velocity * dt;
+        // Delikatny ruch w lewo i prawo
+        velocity.x += ((rand() % 3) - 1) * 0.1f;
+    }
+
+    void draw(sf::RenderWindow& window) const {
+        sf::CircleShape shape(size);
+        shape.setPosition(position.x, position.y);
+        shape.setFillColor(sf::Color(255, 255, 255, 200));
+        window.draw(shape);
+    }
+};
+
 class Emitter {
     std::vector<Particle> particles;
     Vector3D position;
@@ -114,68 +137,21 @@ private:
     }
 };
 
-// Klasa cząsteczki - Snowflake
-class Snowflake {
-public:
-    Vector3D position;
-    Vector3D velocity;
-    float size;
-
-    Snowflake(const Vector3D& pos, const Vector3D& vel, float sz)
-        : position(pos), velocity(vel), size(sz) {}
-
-    void update(float dt) {
-        position += velocity * dt;
-
-        // Reset snowflake position if it goes off screen
-        if (position.y > 600) {
-            position.y = -size;
-            position.x = static_cast<float>(rand() % 800);
-        }
-    }
-
-    void draw(sf::RenderWindow& window) const {
-        sf::CircleShape shape(size);
-        shape.setPosition(position.x, position.y);
-        shape.setFillColor(sf::Color(255, 255, 255, 200));
-        window.draw(shape);
-    }
-};
-
-// Klasa emitera - Snow Emitter
-class SnowEmitter {
-    std::vector<Snowflake> snowflakes;
-
-public:
-    SnowEmitter(int count) {
-        for (int i = 0; i < count; ++i) {
-            float x = static_cast<float>(rand() % 800);
-            float y = static_cast<float>(rand() % 600);
-            float size = static_cast<float>(rand() % 3 + 1);
-            Vector3D velocity(0, static_cast<float>(rand() % 30 + 10), 0);
-            snowflakes.emplace_back(Vector3D(x, y, 0), velocity, size);
-        }
-    }
-
-    void update(float dt) {
-        for (auto& snowflake : snowflakes) {
-            snowflake.update(dt);
-        }
-    }
-
-    void draw(sf::RenderWindow& window) const {
-        for (const auto& snowflake : snowflakes) {
-            snowflake.draw(window);
-        }
-    }
-};
-
 int main() {
     sf::RenderWindow window(sf::VideoMode(800, 600), "Particle System - Fire and Snow", sf::Style::Default, sf::ContextSettings(24));
     window.setFramerateLimit(60);
 
-    Emitter fireEmitter(Vector3D(400, 580, 0)); // Position fire emitter near the bottom of the screen
-    SnowEmitter snowEmitter(200); // Create snow emitter with 200 snowflakes
+    Emitter fireEmitter(Vector3D(400, 580, 0)); // Position emitter near the bottom of the screen
+
+    std::vector<Snowflake> snowflakes;
+    for (int i = 0; i < 200; ++i) { // Increase the number of snowflakes
+        float x = rand() % 800;
+        float y = rand() % 600;
+        Vector3D position(x, y, 0);
+        Vector3D velocity(0, 30.0f, 0); // Falling down
+        float size = rand() % 3 + 1;
+        snowflakes.emplace_back(position, velocity, size);
+    }
 
     sf::Clock clock;
     while (window.isOpen()) {
@@ -190,11 +166,42 @@ int main() {
 
         fireEmitter.emit(15); // Emit fewer particles for a consistent fire effect
         fireEmitter.update(dt);
-        snowEmitter.update(dt); // Update snowflakes
+
+        for (auto& snowflake : snowflakes) {
+            snowflake.update(dt);
+            // Reset snowflake if it goes off screen
+            if (snowflake.position.y > 600) {
+                snowflake.position.y = 0;
+                snowflake.position.x = rand() % 800;
+            }
+        }
 
         window.clear();
+
+        // Draw ground (optional, decorative)
+        sf::RectangleShape ground(sf::Vector2f(800, 20));
+        ground.setPosition(0, 580);
+        ground.setFillColor(sf::Color(139, 69, 19)); // Brown color for ground
+        window.draw(ground);
+
         fireEmitter.draw(window);
-        snowEmitter.draw(window); // Draw snowflakes
+        
+        for (const auto& snowflake : snowflakes) {
+            snowflake.draw(window);
+        }
+
+        // Draw signature
+        sf::Font font;
+        if (!font.loadFromFile("arial.ttf")) {
+            // Handle font loading error
+            return -1;
+        }
+        
+        sf::Text signature("Mateusz Sierakowski", font, 24);
+        signature.setFillColor(sf::Color::White);
+        signature.setPosition(10, 10);
+        window.draw(signature);
+
         window.display();
     }
 
