@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 
 // Struktura reprezentująca cząsteczkę
 struct Particle {
@@ -53,6 +54,12 @@ struct Spring {
     }
 };
 
+sf::Color calculateSpringColor(float distance, float restLength) {
+    float ratio = distance / restLength;
+    ratio = std::min(1.f, ratio); // Clamp ratio to 1
+    return sf::Color(255 * ratio, 255 * (1 - ratio), 0); // Gradient od zielonego do czerwonego
+}
+
 int main() {
     // Parametry symulacji
     const int windowWidth = 800;
@@ -61,9 +68,17 @@ int main() {
     const float deltaTime = 0.016f;
 
     // Inicjalizacja okna SFML
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Model fizyczny");
+    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Zaawansowany model fizyczny");
     window.setFramerateLimit(60);
 
+    // Dźwięki
+   /* sf::SoundBuffer buffer;
+    if (!buffer.loadFromFile("spring_sound.wav")) {
+        std::cerr << "Nie udało się załadować dźwięku" << std::endl;
+    }
+    sf::Sound springSound;
+    springSound.setBuffer(buffer);
+*/
     // Tworzenie cząsteczek
     std::vector<Particle> particles;
     const int numParticles = 10;
@@ -91,12 +106,10 @@ int main() {
             }
 
             if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                sf::Vector2f mousePosition(event.mouseButton.x, event.mouseButton.y);
                 for (auto& particle : particles) {
-                    if (std::hypot(particle.position.x - mousePosition.x, particle.position.y - mousePosition.y) <= 15.f) {
+                    if (std::hypot(particle.position.x - event.mouseButton.x, particle.position.y - event.mouseButton.y) < 10.f) {
                         dragging = true;
                         draggedParticle = &particle;
-                        std::cout << "Dragging particle at position: " << particle.position.x << ", " << particle.position.y << std::endl;
                         break;
                     }
                 }
@@ -105,10 +118,6 @@ int main() {
             if (event.type == sf::Event::MouseButtonReleased && event.mouseButton.button == sf::Mouse::Left) {
                 dragging = false;
                 draggedParticle = nullptr;
-            }
-
-            if (event.type == sf::Event::MouseButtonPressed) {
-                std::cout << "Mouse clicked at: " << event.mouseButton.x << ", " << event.mouseButton.y << std::endl;
             }
         }
 
@@ -133,9 +142,12 @@ int main() {
         window.clear();
 
         for (const auto& spring : springs) {
+            float distance = std::sqrt(std::pow(spring.p2->position.x - spring.p1->position.x, 2) +
+                                       std::pow(spring.p2->position.y - spring.p1->position.y, 2));
+            sf::Color color = calculateSpringColor(distance, spring.restLength);
             sf::Vertex line[] = {
-                sf::Vertex(spring.p1->position, sf::Color::White),
-                sf::Vertex(spring.p2->position, sf::Color::White)
+                sf::Vertex(spring.p1->position, color),
+                sf::Vertex(spring.p2->position, color)
             };
             window.draw(line, 2, sf::Lines);
         }
