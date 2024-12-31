@@ -71,14 +71,6 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Zaawansowany model fizyczny");
     window.setFramerateLimit(60);
 
-    // Dźwięki
-   /* sf::SoundBuffer buffer;
-    if (!buffer.loadFromFile("spring_sound.wav")) {
-        std::cerr << "Nie udało się załadować dźwięku" << std::endl;
-    }
-    sf::Sound springSound;
-    springSound.setBuffer(buffer);
-*/
     // Tworzenie cząsteczek
     std::vector<Particle> particles;
     const int numParticles = 10;
@@ -98,6 +90,13 @@ int main() {
     bool dragging = false;
     Particle* draggedParticle = nullptr;
 
+    // Stan tworzenia sprężyny
+    bool creatingSpring = false;
+    Particle* firstParticle = nullptr;
+
+    // Tryb edycji
+    bool isEditing = false;
+
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
@@ -105,12 +104,85 @@ int main() {
                 window.close();
             }
 
-            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                for (auto& particle : particles) {
-                    if (std::hypot(particle.position.x - event.mouseButton.x, particle.position.y - event.mouseButton.y) < 10.f) {
-                        dragging = true;
-                        draggedParticle = &particle;
-                        break;
+            if (event.type == sf::Event::KeyPressed) {
+                if (event.key.code == sf::Keyboard::Space) {
+                    isEditing = !isEditing; // Przełącz tryb edycji
+                }
+            }
+
+            if (event.type == sf::Event::MouseButtonPressed) {
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    if (!isEditing) {
+                        for (auto& particle : particles) {
+                            if (std::hypot(particle.position.x - event.mouseButton.x, particle.position.y - event.mouseButton.y) < 10.f) {
+                                dragging = true;
+                                draggedParticle = &particle;
+                                break;
+                            }
+                        }
+                    } else {
+                        // Tryb edycji - przesuwanie nieprzypiętych cząsteczek
+                        for (auto& particle : particles) {
+                            if (!particle.isPinned &&
+                                std::hypot(particle.position.x - event.mouseButton.x, particle.position.y - event.mouseButton.y) < 10.f) {
+                                dragging = true;
+                                draggedParticle = &particle;
+                                break;
+                            }
+                        }
+                    }
+                } else if (event.mouseButton.button == sf::Mouse::Right) {
+                    if (isEditing) {
+                        bool foundParticle = false;
+                        for (auto& particle : particles) {
+                            if (std::hypot(particle.position.x - event.mouseButton.x, particle.position.y - event.mouseButton.y) < 10.f) {
+                                if (!creatingSpring) {
+                                    creatingSpring = true;
+                                    firstParticle = &particle;
+                                } else {
+                                    springs.emplace_back(firstParticle, &particle);
+                                    creatingSpring = false;
+                                    firstParticle = nullptr;
+                                }
+                                foundParticle = true;
+                                break;
+                            }
+                        }
+
+                        if (!foundParticle) {
+                            sf::Vector2f newPosition(event.mouseButton.x, event.mouseButton.y);
+                            particles.emplace_back(newPosition);
+
+                            // Znajdź najbliższą istniejącą cząsteczkę i połącz nową sprężyną
+                            Particle* closestParticle = nullptr;
+                            float closestDistance = std::numeric_limits<float>::max();
+                            for (auto& particle : particles) {
+                                if (&particle != &particles.back()) {
+                                    float distance = std::hypot(particle.position.x - newPosition.x, particle.position.y - newPosition.y);
+                                    if (distance < closestDistance) {
+                                        closestDistance = distance;
+                                        closestParticle = &particle;
+                                    }
+                                }
+                            }
+
+                            if (closestParticle) {
+                                springs.emplace_back(closestParticle, &particles.back());
+                            }
+                        }
+                    }
+                } else if (event.mouseButton.button == sf::Mouse::Middle) {
+                    if (isEditing) {
+                        for (auto it = particles.begin(); it != particles.end(); ++it) {
+                            if (std::hypot(it->position.x - event.mouseButton.x, it->position.y - event.mouseButton.y) < 10.f) {
+                                // Usuwanie sprężyn powiązanych z tą cząsteczką
+                                springs.erase(std::remove_if(springs.begin(), springs.end(), [&](const Spring& spring) {
+                                    return spring.p1 == &(*it) || spring.p2 == &(*it);
+                                }), springs.end());
+                                particles.erase(it);
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -121,18 +193,20 @@ int main() {
             }
         }
 
-        // Aktualizacja stanu cząsteczek
-        for (auto& particle : particles) {
-            particle.applyForce(sf::Vector2f(0.f, gravityStrength));
-            particle.update(deltaTime);
+        if (!isEditing) {
+            // Aktualizacja stanu cząsteczek
+            for (auto& particle : particles) {
+                particle.applyForce(sf::Vector2f(0.f, gravityStrength));
+                particle.update(deltaTime);
+            }
+
+            // Aktualizacja sprężyn
+            for (auto& spring : springs) {
+                spring.applyConstraint();
+            }
         }
 
-        // Aktualizacja sprężyn
-        for (auto& spring : springs) {
-            spring.applyConstraint();
-        }
-
-        // Aktualizacja pozycji przeciąganej cząsteczki
+        // Aktualizacja pozycji przeciąganej cząsteczki w trybie edycji
         if (dragging && draggedParticle) {
             sf::Vector2i mousePos = sf::Mouse::getPosition(window);
             draggedParticle->position = sf::Vector2f(mousePos.x, mousePos.y);
@@ -158,6 +232,17 @@ int main() {
             shape.setPosition(particle.position);
             shape.setFillColor(particle.isPinned ? sf::Color::Red : sf::Color::Blue);
             window.draw(shape);
+        }
+
+        // Informacja o trybie edycji
+        if (isEditing) {
+            sf::Font font;
+            if (font.loadFromFile("arial.ttf")) {
+                sf::Text text("Editing Mode", font, 20);
+                text.setFillColor(sf::Color::White);
+                text.setPosition(10.f, 10.f);
+                window.draw(text);
+            }
         }
 
         window.display();
